@@ -48,47 +48,19 @@ namespace Application.Services.Core
 
         public async Task<Quiz> AdminCreateQuizAsync(QuizCreateDTO quizCreateDTO)
         {
-            quizCreateDTO.TempQuestions = JsonConvert.DeserializeObject<List<QuestionCreateDTO>>(quizCreateDTO.SerializeQuestions);
             var quiz = _mapper.Map<Quiz>(quizCreateDTO);
-            foreach (var q in quizCreateDTO.TempQuestions.Select((value, i) => new { i, value }))
-            {
-                var question = _mapper.Map<Question>(q.value);
-                if (q.value.IsAudioQuestion)
-                {
-                    question.AudioFileName = await _fileService.GetAudioFromWord(q.value.Content, q.value.EngVoice);
-                }
-                if (quizCreateDTO.QuestionImages.Count > 0)
-                {
-                    if (quizCreateDTO.QuestionImages[q.i] != null)
-                    {
-                        question.ImageFileName = _fileService.UploadFile(quizCreateDTO.QuestionImages[q.i], SD.ImagePath);
-                    }
-                }
-                foreach (var a in q.value.Answers.Select((value, j) => new { j, value }))
-                {
-                    if (a.value.IsAudioAnswer)
-                    {
-                        question.Answers.ElementAt(a.j).AudioFileName = await _fileService.GetAudioFromWord(a.value.Content, SD.AudioPath);
-                    }
-                    if (quizCreateDTO.AnswerImages.Count > 0)
-                    {
-                        if (quizCreateDTO.AnswerImages[a.j] != null)
-                        {
-                            question.Answers.ElementAt(a.j).ImageFileName = _fileService.UploadFile(quizCreateDTO.AnswerImages[a.j], SD.ImagePath);
-                        }
-                    }
-                }
-                quiz.Questions.Add(new QuizQuestion
-                {
-                    Question = question
-                });
-            }
             _context.Quiz.Add(quiz);
             if (await _context.SaveChangesAsync() > 0)
             {
                 return quiz;
             }
             return null;
+        }
+
+        public async Task<List<QuestionDTO>> AnonymousDoQuizAsync(Guid id)
+        {
+           var questions = await _context.QuizQuestions.Where(q => q.QuizId == id).Include(inc => inc.Question).ThenInclude(inc => inc.Answers).AsNoTracking().ToListAsync();
+           return _mapper.Map<List<QuestionDTO>>(questions);
         }
 
         public async Task<bool> CheckAccountQuizAsync(int ownerId, Guid quizId)
@@ -117,54 +89,20 @@ namespace Application.Services.Core
             return false;
         }
 
-        public async Task<Quiz> ClientCreateQuizAsync(int accountId, QuizCreateDTO quizCreateDTO)
+        public async Task<bool> CreateQuizQuestionAsync(Guid id, QuestionCreateDTO questionCreate)
         {
-            quizCreateDTO.TempQuestions = JsonConvert.DeserializeObject<List<QuestionCreateDTO>>(quizCreateDTO.SerializeQuestions);
-            var quiz = _mapper.Map<Quiz>(quizCreateDTO);
-            foreach (var q in quizCreateDTO.TempQuestions.Select((value, i) => new { i, value }))
-            {
-                var question = _mapper.Map<Question>(q.value);
-                if (q.value.IsAudioQuestion)
-                {
-                    question.AudioFileName = await _fileService.GetAudioFromWord(q.value.Content, q.value.EngVoice);
-                }
-                if (quizCreateDTO.QuestionImages.Count > 0)
-                {
-                    if (quizCreateDTO.QuestionImages[q.i] != null)
-                    {
-                        question.ImageFileName = _fileService.UploadFile(quizCreateDTO.QuestionImages[q.i], SD.ImagePath);
-                    }
-                }
-                foreach (var a in q.value.Answers.Select((value, j) => new { j, value }))
-                {
-                    if (a.value.IsAudioAnswer)
-                    {
-                        question.Answers.ElementAt(a.j).AudioFileName = await _fileService.GetAudioFromWord(a.value.Content, SD.AudioPath);
-                    }
-                    if (quizCreateDTO.AnswerImages.Count > 0)
-                    {
-                        if (quizCreateDTO.AnswerImages[a.j] != null)
-                        {
-                            question.Answers.ElementAt(a.j).ImageFileName = _fileService.UploadFile(quizCreateDTO.AnswerImages[a.j], SD.ImagePath);
-                        }
-                    }
-                }
-                quiz.Questions.Add(new QuizQuestion
-                {
-                    Question = question
+            var quiz = await _context.Quiz.Where(q => q.Id == id).Include(inc => inc.Questions).FirstOrDefaultAsync();
+            var newQuestion = await _questionService.CreateQuestionAsync(questionCreate);
+            if(newQuestion != null){
+                quiz.Questions.Add(new QuizQuestion{
+                    Question = newQuestion
                 });
+                if(await _context.SaveChangesAsync() > 0){
+                    return true;
+                }
+                return false;
             }
-            _context.Quiz.Add(quiz);
-            quiz.Accounts.Add(new AccountQuiz
-            {
-                AccountId = accountId,
-                Quiz = quiz
-            });
-            if (await _context.SaveChangesAsync() > 0)
-            {
-                return quiz;
-            }
-            return null;
+            return false;
         }
 
         public async Task<bool> DeleteQuizAsync(Guid quizId)
@@ -174,28 +112,68 @@ namespace Application.Services.Core
             return await _context.SaveChangesAsync() > 0;
         }
 
+        public async Task<bool> DoneQuizAsync(Guid id, int accountId)
+        {
+           var quizHistory = await _context.Histories.Where(qh => qh.QuizId == id && qh.AccountId == accountId && !qh.IsDone).FirstOrDefaultAsync();
+           if(quizHistory == null){
+               return false;
+           }
+           quizHistory.IsDone = true;
+           quizHistory.EndTimestamp = DateTime.Now;
+           quizHistory.TimeSpent = quizHistory.EndTimestamp.Subtract(quizHistory.StartTimestamp).Minutes;
+           if(await _context.SaveChangesAsync() > 0){
+               return true;
+           }
+           return false;
+        }
+
+        public async Task<List<QuestionDTO>> DoQuizAsync(Guid id, int accountId)
+        {
+            var quizHistory = await _context.Histories.Where(qh => qh.QuizId == id && qh.AccountId == accountId && !qh.IsDone).FirstOrDefaultAsync();
+            if(quizHistory == null){
+                quizHistory = new History{
+                    QuizId = id,
+                    AccountId = accountId,
+                    StartTimestamp = DateTime.Now
+                };
+                _context.Histories.Add(quizHistory);
+            }
+            return await AnonymousDoQuizAsync(id);
+        }
+
         public async Task<PaginateDTO<QuizDTO>> GetAllQuizAsync(PaginationDTO pagination,PublishStatus publishStatus = PublishStatus.None, Status status = Status.Nope, DifficultLevel difficult = DifficultLevel.None, string search = null, string sort = null)
         {
-            var quizzes = await _context.Quiz.Include(inc => inc.Questions).ThenInclude(inc => inc.Question).ThenInclude(inc => inc.Answers).OrderByDescending(orderBy => orderBy.CreatedDate).AsNoTracking().ToListAsync();
+            var quizzes = from q in _context.Quiz.OrderByDescending(orderBy => orderBy.UpdatedDate).OrderByDescending(orderBy => orderBy.CreatedDate).AsNoTracking() select q;
             if(publishStatus != PublishStatus.None){
-                quizzes = quizzes.Where(q => q.PublishStatus == publishStatus).ToList();
+                quizzes = quizzes.Where(q => q.PublishStatus == publishStatus);
             }
             if(difficult != DifficultLevel.None){
-                quizzes = quizzes.Where(q => q.DifficultLevel == difficult).ToList();
+                quizzes = quizzes.Where(q => q.DifficultLevel == difficult);
             }
             if (search != null)
             {
-                quizzes = quizzes.Where(q => (!string.IsNullOrEmpty(q.QuizName) && q.QuizName.ToLower().Contains(search.ToLower()))).ToList();
+                quizzes = quizzes.Where(q => (!string.IsNullOrEmpty(q.QuizName) && q.QuizName.ToLower().Contains(search.ToLower())));
             }
             if(status != Status.Nope){
-                quizzes = quizzes.Where(q => q.VerifiedStatus == status).ToList();
+                quizzes = quizzes.Where(q => q.VerifiedStatus == status);
             }
             if(sort == "Hot"){
-                quizzes = quizzes.OrderByDescending(q => q.AccessCount).ToList();
+                quizzes = quizzes.OrderByDescending(q => q.AccessCount);
             }
-            var quizzesDTO = _mapper.Map<List<QuizDTO>>(quizzes);
-            var pagingListQuizzes = PagingList<QuizDTO>.OnCreate(quizzesDTO, pagination.CurrentPage, pagination.PageSize);
-            return pagingListQuizzes.CreatePaginate();
+            
+            var pagingListQuizzes = await PagingList<Quiz>.OnCreateAsync(quizzes, pagination.CurrentPage, pagination.PageSize);
+            var result = pagingListQuizzes.CreatePaginate();
+            var quizzesDTO = _mapper.Map<List<QuizDTO>>(result.Items);
+            foreach(var quiz in quizzesDTO){
+                quiz.Questions = _mapper.Map<List<QuestionDTO>>(await _context.QuizQuestions.Where(qq => qq.QuizId == quiz.Id).Include(inc => inc.Question).ThenInclude(inc => inc.Answers).ToListAsync());
+            }
+            return new PaginateDTO<QuizDTO>{
+                CurrentPage = pagination.CurrentPage,
+                PageSize = pagination.PageSize,
+                Items = quizzesDTO,
+                TotalItems = result.TotalItems,
+                TotalPages = result.TotalPages
+            };
         }
 
         public async Task<QuizDTO> GetQuizAsync(Guid id)

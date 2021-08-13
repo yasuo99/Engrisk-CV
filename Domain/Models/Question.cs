@@ -39,5 +39,7 @@ namespace Domain.Models
         public virtual ICollection<WordQuestion> Words { get; set; }
         [JsonIgnore]
         public virtual ICollection<ScriptQuestion> Scripts { get; set; }
+        [JsonIgnore]
+        public virtual ICollection<AccountAnswer> AccountAnswers { get; set; }
     }
 }

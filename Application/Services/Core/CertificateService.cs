@@ -75,7 +75,7 @@ namespace Application.Services.Core
             string score = $"{signatureCertificateDTO.Score}";
             var date = DateTime.Now;
             var account = await _context.Accounts.AsNoTracking().FirstOrDefaultAsync(acc => acc.Id == accountId);
-            string sign = String.IsNullOrEmpty(signatureCertificateDTO.Signature)  ? account.UserName : signatureCertificateDTO.Signature;
+            string sign = String.IsNullOrEmpty(signatureCertificateDTO.Signature) ? account.UserName : signatureCertificateDTO.Signature;
 
             string imageFilePath = Path.Combine(_fileService.ContentRootPath, Path.Combine(SD.CertificatePath, "template.png"));
 
@@ -120,10 +120,10 @@ namespace Application.Services.Core
             }
             var filePath = Path.Combine(_fileService.ContentRootPath, SD.CertificatePath);
             string fileName = $"{account.UserName}-{date.Date.ToString("dd-MM-yyyy")}.png";
-            var result = Path.Combine(filePath,fileName);
+            var result = Path.Combine(filePath, fileName);
             newBitmap.Save(result);//save the image file
             newBitmap.Dispose();
-            var returnPath = _fileService.GetAppBaseUrl(Path.Combine(SD.CertificatePath, fileName),"image");
+            var returnPath = _fileService.GetAppBaseUrl(Path.Combine(SD.CertificatePath, fileName), "image");
             return returnPath;
         }
 
@@ -140,20 +140,29 @@ namespace Application.Services.Core
 
         public async Task<PaginateDTO<CertificateDTO>> GetAllCertificatesAsync(PaginationDTO pagination, string search = null)
         {
-            var certificates = await _context.Certificates.OrderByDescending(orderBy => orderBy.CreatedDate).AsNoTracking().ToListAsync();
+            var certificates = from c in _context.Certificates.OrderByDescending(orderBy => orderBy.UpdatedDate).OrderByDescending(orderBy => orderBy.CreatedDate).AsNoTracking() select c;
             if (search != null)
             {
-                certificates = certificates.Where(c => c.Title.ToLower().Contains(search.Trim().ToLower())).ToList();
+                certificates = certificates.Where(c => c.Title.ToLower().Contains(search.Trim().ToLower()));
             }
-            var certificatesDto = _mapper.Map<List<CertificateDTO>>(certificates);
 
-            var pagingListCertificatesDto = PagingList<CertificateDTO>.OnCreate(certificatesDto, pagination.CurrentPage, pagination.PageSize);
-            var paginated = pagingListCertificatesDto.CreatePaginate();
-            foreach (var certificate in paginated.Items)
+
+            var pagingListCertificatesDto = await PagingList<Certificate>.OnCreateAsync(certificates, pagination.CurrentPage, pagination.PageSize);
+            var result = pagingListCertificatesDto.CreatePaginate();
+            var certificatesDto = _mapper.Map<List<CertificateDTO>>(result.Items);
+            foreach (var certificate in certificatesDto)
             {
-                certificate.Route = _mapper.Map<RouteDTO>(await _context.Routes.Where(route => route.Sections.Any(sec => sec.Scripts.Any(script => script.Certificate.Id == certificate.Id))).FirstOrDefaultAsync());
+                certificate.Route = _mapper.Map<RouteDTO>(await _context.Routes.Where(route => route.Sections.Any(sec => sec.Scripts.Any(script => script.Certificate.Id == certificate.Id))).AsNoTracking().FirstOrDefaultAsync());
             }
-            return paginated;
+
+            return new PaginateDTO<CertificateDTO>
+            {
+                CurrentPage = pagination.CurrentPage,
+                PageSize = pagination.PageSize,
+                Items = certificatesDto,
+                TotalItems = result.TotalItems,
+                TotalPages = result.TotalPages
+            };
         }
 
         public async Task<List<CertificateDTO>> GetAllCertificatesWithoutPaginateAsync(string search = null)

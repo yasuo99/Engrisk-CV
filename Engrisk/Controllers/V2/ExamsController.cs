@@ -11,6 +11,7 @@ using System.Security.Claims;
 using System.Collections.Generic;
 using Application.DTOs.Answer;
 using Domain.Enums;
+using Application.DTOs.Question;
 
 namespace Engrisk.Controllers.V2
 {
@@ -28,7 +29,7 @@ namespace Engrisk.Controllers.V2
         [HttpGet]
         public async Task<IActionResult> GetExam([FromQuery] PaginationDTO pagination, [FromQuery] ExamPurposes purpose = ExamPurposes.None, [FromQuery] DifficultLevel difficult = DifficultLevel.None, [FromQuery] string search = null, [FromQuery] string sort = null)
         {
-            return Ok(await _examService.GetExams(pagination, purpose,difficult, search,sort));
+            return Ok(await _examService.GetExams(pagination, purpose, difficult, search, sort));
         }
         [HttpGet("all")]
         public async Task<IActionResult> GetExam([FromQuery] ExamPurposes purpose = ExamPurposes.None, [FromQuery] string search = null)
@@ -43,6 +44,15 @@ namespace Engrisk.Controllers.V2
                 return NotFound();
             }
             return Ok(await _examService.GetExamAsync(id));
+        }
+        [HttpGet("{id}/analyze")]
+        public async Task<IActionResult> GetExamAnalyze(Guid id)
+        {
+            if (!await _examService.CheckExist(id))
+            {
+                return NotFound();
+            }
+            return Ok(await _examService.GetExamAnalyzeAsync(id));
         }
         [HttpGet("user/{id}")]
         public async Task<IActionResult> GetUserExam(int id, [FromQuery] PaginationDTO pagination, [FromQuery] string search)
@@ -89,20 +99,33 @@ namespace Engrisk.Controllers.V2
             return NoContent();
         }
         [Authorize]
+        [HttpPost("{id}/questions")]
+        public async Task<IActionResult> CreateExamQuestion(Guid id, [FromForm] QuestionCreateDTO questionCreate){
+            if(!await _examService.CheckExist(id)){
+                return NotFound();
+            }
+            if(await _examService.CreateExamQuestionAsync(id,questionCreate)){
+                return Ok();
+            }
+            return NoContent();
+        }
+        [Authorize]
         [HttpPut("{id}/publish/change")]
-        public async Task<IActionResult> PublishChange(Guid id, [FromQuery] PublishStatus status){
+        public async Task<IActionResult> PublishChange(Guid id, [FromQuery] PublishStatus status)
+        {
             try
             {
-                if(!await _examService.CheckExist(id)){
+                if (!await _examService.CheckExist(id))
+                {
                     return NotFound();
                 }
-                await _examService.PublishAsync(id,status);
+                await _examService.PublishAsync(id, status);
                 return Ok();
             }
             catch (System.Exception ex)
             {
-                 // TODO
-                 return BadRequest(ex);
+                // TODO
+                return BadRequest(ex);
             }
         }
         [Authorize]
@@ -126,16 +149,46 @@ namespace Engrisk.Controllers.V2
         [HttpPost]
         public async Task<IActionResult> CreateAdminExam([FromBody] ExamDTO examCreateDTO)
         {
-            var exam = await _examService.CreateExamAsync(examCreateDTO);
-            return Ok();
-        }
+            try
+            {
+                var exam = await _examService.CreateExamAsync(examCreateDTO);
+                if (exam == null)
+                {
+                    return NoContent();
+                }
+                return Ok();
+            }
+            catch (System.Exception ex)
+            {
+                // TODO
+                return BadRequest();
+            }
 
+        }
+        [Authorize]
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteExam(Guid id)
+        {
+            if (!await _examService.CheckExist(id))
+            {
+                return NotFound();
+            }
+            if (await _examService.DeleteExamAsync(id))
+            {
+                return Ok();
+            }
+            return NoContent();
+        }
         private string GenerateSharedUrl(Exam exam)
         {
             StringBuilder sharedUrl = new StringBuilder();
             sharedUrl.Append("/exam?id=" + exam.Id);
             sharedUrl.Append("&shared=true");
             return sharedUrl.ToString();
+        }
+        [HttpGet("data")]
+        public async Task<IActionResult> GenerateData(){
+            return Ok(await _examService.GenerateQuestionAsync());
         }
 
     }

@@ -31,7 +31,6 @@ namespace Application.Services.Core.Abstraction
         Task<AccountDetailDTO> GetAccountWithRolesAsync(int id);
         Task<List<string>> GetAccountRolesAsync(int id);
         Task<int> CheckAccounts(List<int> users);
-
         //Follow Entity
         Task<List<FollowingDTO>> GetAccountFollowing(int id);
         Task<List<FollowingDTO>> GetAccountFollower(int id);
@@ -42,7 +41,9 @@ namespace Application.Services.Core.Abstraction
         //BoxChat Entity
         Task<bool> CheckBoxchatInviteAsync(Guid notificationId, int id);
         Task<bool> CheckBoxchatOwnerAsync(Guid boxchatId, int id);
-        Task<BoxChat> CreateBoxChatAsync(BoxchatCreateDTO boxchatCreateDTO);
+        Task<bool> UpdateBoxchatAsync(Guid boxchatId, BoxchatUpdateDTO boxchat);
+        Task<bool> DeleteBoxchatAsync(Guid boxchatId);
+        Task<BoxChat> CreateBoxChatAsync(int accountId, BoxchatCreateDTO boxchatCreateDTO);
         Task<List<BoxchatDTO>> GetUserBoxchatAsync(int accountId);
         Task InviteUserToBoxchat(int userId, Guid boxchatId);
         Task InviteUsersToBoxchatAsync(Guid boxchatId, List<int> users);
@@ -88,5 +89,7 @@ namespace Application.Services.Core.Abstraction
 
         //Route
         Task<bool> SelectRouteAsync(int accountId, Guid routeId);
+        //Data
+        Task<bool> MakeUserFinishRouteAsync(int accountId, Guid routeId);
     }
 }

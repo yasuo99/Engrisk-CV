@@ -23,6 +23,8 @@ using Application.Mediator.Accounts;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.FileProviders;
 using System.IO;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.OpenApi.Models;
 
 namespace Engrisk
 {
@@ -82,7 +84,6 @@ namespace Engrisk
                         if (!string.IsNullOrEmpty(accessToken) && ((path.StartsWithSegments("/notification")) || path.StartsWithSegments("/message") || path.StartsWithSegments("/tournament")))
                         {
                             context.Token = accessToken;
-                            System.Console.WriteLine(context.Token);
                         }
                         return Task.CompletedTask;
                     }
@@ -99,6 +100,7 @@ namespace Engrisk
             {
                 options.UseSqlServer(Configuration.GetConnectionString("DefaultConnection"));
                 options.UseInternalServiceProvider(serviceProvider);
+                options.EnableSensitiveDataLogging(true);
             });
             services.AddControllers(opts =>
             {
@@ -142,6 +144,16 @@ namespace Engrisk
             services.AddCors();
             services.AddSignalR();
             services.AddMediatR(typeof(List.Handler).Assembly);
+            services.AddSwaggerGen(c =>
+            {
+                c.SwaggerDoc("v1", new OpenApiInfo
+                {
+                    Version = "v1",
+                    Title = "Engrisk API",
+                    Description = "Engrisk .Net Core Web API",
+                    TermsOfService = new Uri("https://example.com/terms"),
+                });
+            });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -155,6 +167,12 @@ namespace Engrisk
             {
                 app.UseMiddleware<ExceptionMiddleware>();
             }
+            app.UseSwagger();
+            app.UseSwaggerUI(opts =>
+          {
+              opts.SwaggerEndpoint("/swagger/v1/swagger.json", "My API V1");
+              opts.RoutePrefix = string.Empty;
+          });
             // app.UseHttpsRedirection();
             app.UseCors(options =>
             {

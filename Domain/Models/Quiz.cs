@@ -15,6 +15,7 @@ namespace Domain.Models
             Accounts = new HashSet<AccountQuiz>();
             Shared = new HashSet<AccountShare>();
             VerifiedStatus = Status.Nope;
+            PublishStatus = PublishStatus.UnPublished;
         }
         public string QuizPhoto { get; set; }
         public string QuizName { get; set; }

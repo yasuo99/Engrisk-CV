@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Application.DTOs.Account.Route;
 using Application.DTOs.Pagination;
 using Application.DTOs.Question;
 using Application.DTOs.Quiz;
@@ -31,6 +32,7 @@ namespace Application.Services.Core
         private AnonymousSettings _anonymousSettings;
         private IFileService _fileService;
         private IQuestionService _questionService;
+        private INotificationService _notificationService;
         public Section AnonymousSection
         {
             get
@@ -39,7 +41,7 @@ namespace Application.Services.Core
             }
         }
         private Section _section;
-        public SectionService(ApplicationDbContext context, IMapper mapper, IQuizService quizService, IOptions<AnonymousSettings> anonymousSettings, IFileService fileService, IQuestionService questionService)
+        public SectionService(ApplicationDbContext context, IMapper mapper, IQuizService quizService, IOptions<AnonymousSettings> anonymousSettings, IFileService fileService, IQuestionService questionService, INotificationService notificationService)
         {
             _context = context;
             _mapper = mapper;
@@ -52,6 +54,7 @@ namespace Application.Services.Core
             };
             _fileService = fileService;
             _questionService = questionService;
+            _notificationService = notificationService;
         }
         public async Task<bool> CheckExistAsync(Guid sectionId)
         {
@@ -433,15 +436,28 @@ namespace Application.Services.Core
 
         public async Task<PaginateDTO<SectionDTO>> GetManageSectionsAsync(PaginationDTO pagination, string search = null)
         {
-            var usersSections = await _context.AccountSections.AsNoTracking().Select(sel => sel.SectionId).ToListAsync();
-            var engriskSections = await _context.Sections.Where(sec => !usersSections.Any(us => us == sec.Id)).Include(inc => inc.Route).AsNoTracking().OrderByDescending(orderBy => orderBy.CreatedDate).ToListAsync();
+            var sections = from s in _context.Sections.OrderByDescending(orderBy => orderBy.UpdatedDate).OrderByDescending(orderBy => orderBy.CreatedDate).AsNoTracking() select s;
             if (search != null)
             {
-                engriskSections = engriskSections.Where(sec => (!string.IsNullOrEmpty(sec.SectionName) && sec.SectionName.ToLower().Contains(search.ToLower())) || (!string.IsNullOrEmpty(sec.Description) && sec.Description.ToLower().Contains(search.ToLower()))).ToList();
+                sections = sections.Where(sec => (!string.IsNullOrEmpty(sec.SectionName) && sec.SectionName.ToLower().Contains(search.ToLower())) || (!string.IsNullOrEmpty(sec.Description) && sec.Description.ToLower().Contains(search.ToLower())));
             }
-            var engriskSectionsDto = _mapper.Map<List<SectionDTO>>(engriskSections);
-            var pagingListEngriskSections = PagingList<SectionDTO>.OnCreate(engriskSectionsDto, pagination.CurrentPage, pagination.PageSize);
-            return pagingListEngriskSections.CreatePaginate();
+
+            var pagingListEngriskSections = await PagingList<Section>.OnCreateAsync(sections, pagination.CurrentPage, pagination.PageSize);
+            var result = pagingListEngriskSections.CreatePaginate();
+            var engriskSectionsDto = _mapper.Map<List<SectionDTO>>(result.Items);
+            foreach (var sec in engriskSectionsDto)
+            {
+                sec.Route = _mapper.Map<RouteDTO>(await _context.Routes.FirstOrDefaultAsync(route => route.Id == sec.RouteId));
+                sec.TotalScript = await _context.Scripts.Where(script => script.SectionId == sec.Id).CountAsync();
+            }
+            return new PaginateDTO<SectionDTO>
+            {
+                CurrentPage = pagination.CurrentPage,
+                PageSize = pagination.PageSize,
+                Items = engriskSectionsDto,
+                TotalItems = result.TotalItems,
+                TotalPages = result.TotalPages
+            };
         }
 
         public async Task<bool> DeleteSectionAsync(Guid id)
@@ -611,7 +627,7 @@ namespace Application.Services.Core
             {
                 var wordPracticeQuestions = await _context.WordQuestions.Where(wq => wq.WordId == word.Id).Include(inc => inc.Question).ThenInclude(inc => inc.Answers).Select(sel => sel.Question).AsNoTracking().ToListAsync();
                 //Add vocabulary practice questions first
-                scriptLearnDto.Questions.AddRange(_mapper.Map<List<QuestionDTO>>(wordPracticeQuestions.GetAmountRandomFromAList(script.VocabularySetting)));
+                scriptLearnDto.Questions.AddRange(_mapper.Map<List<QuestionDTO>>(wordPracticeQuestions.GetAmountRandomFromAList(2)));
             }
 
             scriptLearnDto.Questions.AddRange(_mapper.Map<List<QuestionDTO>>(await _context.ScriptQuestions.Where(sq => sq.ScriptId == id).Include(inc => inc.Question).ThenInclude(inc => inc.Answers).Select(sel => sel.Question).AsNoTracking().ToListAsync()));
@@ -657,6 +673,10 @@ namespace Application.Services.Core
 
         public async Task<bool> CheckPreviousSectionDoneAsync(Guid id, int accountId)
         {
+            var section = await _context.Sections.FirstOrDefaultAsync(sec => sec.Id == id);
+            if(section.Index == 0){
+                return true;
+            }
             var sectionProgress = await _context.SectionProgresses.Where(sp => sp.SectionId == id && sp.AccountId == accountId).Include(inc => inc.Section).FirstOrDefaultAsync();
             var previousSectionProgress = await _context.SectionProgresses.Where(sp => sp.Section.Index == sectionProgress.Section.Index - 1 && sp.AccountId == accountId).FirstOrDefaultAsync();
             if (previousSectionProgress == null)
@@ -681,7 +701,7 @@ namespace Application.Services.Core
             foreach (var word in scriptLearnDto.Words)
             {
                 var wordPracticeQuestions = await _context.WordQuestions.Where(wq => wq.WordId == word.Id).Include(inc => inc.Question).ThenInclude(inc => inc.Answers).Select(sel => sel.Question).ToListAsync();
-                scriptLearnDto.Questions.AddRange(_mapper.Map<List<QuestionDTO>>(wordPracticeQuestions.GetAmountRandomFromAList(script.VocabularySetting)));
+                scriptLearnDto.Questions.AddRange(_mapper.Map<List<QuestionDTO>>(wordPracticeQuestions.GetAmountRandomFromAList(2)));
             }
             scriptLearnDto.Questions.AddRange(_mapper.Map<List<QuestionDTO>>(await _context.ScriptQuestions.Where(sq => sq.ScriptId == id).Include(inc => inc.Question).ThenInclude(inc => inc.Answers).Select(sel => sel.Question).ToListAsync()));
             return scriptLearnDto;
@@ -695,7 +715,7 @@ namespace Application.Services.Core
                 if (Guid.Empty != script.Id && _section.Scripts.Any(s => s.Id == script.Id))
                 {
                     var currentScript = _section.Scripts.FirstOrDefault(s => s.Id == script.Id);
-                    if (!string.IsNullOrEmpty(script.Theory) || script.Words.Count > 0 || script.Questions.Count > 0 || script.Exam != Guid.Empty || script.CertificateId != Guid.Empty)
+                    if (!string.IsNullOrEmpty(script.Theory) || script.Words.Count > 0 || script.Questions.Count > 0)
                     {
                         if (script.Exam != Guid.Empty)
                         {
@@ -732,7 +752,14 @@ namespace Application.Services.Core
                     }
                     else
                     {
+                        if (currentScript.MiniExam != null)
+                        {
+                            currentScript.MiniExam.Purpose = ExamPurposes.Test;
+                        }
+                        var removeQuestions = currentScript.Questions.Select(sel => sel.QuestionId).ToList();
+                        await _questionService.ChangeStatusAsync(removeQuestions);
                         _section.Scripts.Remove(currentScript);
+
                     }
                 }
                 else
@@ -755,7 +782,7 @@ namespace Application.Services.Core
                             case ScriptTypes.Reading:
                                 newScript.Index = 3;
                                 break;
-                            case ScriptTypes.Writing:
+                            case ScriptTypes.Speaking:
                                 newScript.Index = 4;
                                 break;
                             case ScriptTypes.Conversation:
@@ -798,7 +825,13 @@ namespace Application.Services.Core
         {
             _section ??= await _context.Sections.FirstOrDefaultAsync(sec => sec.Id == id);
             _section.PublishStatus = status;
-            await _context.SaveChangesAsync();
+            if(status == PublishStatus.UnPublished){
+                _section.Route = null;
+            }
+            if (await _context.SaveChangesAsync() > 0)
+            {
+                await _notificationService.SendSignalRResponse("Refresh", "");
+            }
         }
     }
 }

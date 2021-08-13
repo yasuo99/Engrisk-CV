@@ -17,6 +17,7 @@ namespace Domain.Models
             Shared = new HashSet<AccountShare>();
             VerifiedStatus = Status.Nope;
             PublishStatus = PublishStatus.UnPublished;
+            Purpose = ExamPurposes.Test;
         }
         public string Title { get; set; }
         public string Detail { get; set; }
@@ -31,6 +32,8 @@ namespace Domain.Models
         public int AccessCount { get; set; }
         public Status VerifiedStatus { get; set; }
         public PublishStatus PublishStatus { get; set; }
+        public ExamStartPageType StartPage { get; set; }
+        public ExamEndPageType EndPage { get; set; }
         public Guid? ScriptId { get; set; }
         public virtual Script Script { get; set; }
         public virtual ExamOnlineSchedule Schedule { get; set; }

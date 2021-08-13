@@ -14,6 +14,7 @@ namespace Application.DTOs.Account.Route
         public bool IsSequentially { get; set; }
         public int Done { get; set; }
         public DateTime CreatedDate { get; set; }
+        public DateTime UpdatedDate { get; set; }
         public List<SectionLearnDTO> Sections { get; set; }
     }
 }

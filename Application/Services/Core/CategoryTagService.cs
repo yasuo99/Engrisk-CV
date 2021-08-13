@@ -47,11 +47,11 @@ namespace Application.Services.Core
 
         public async Task<PaginateDTO<CategoryTag>> GetAllCategoryTagAsync(PaginationDTO pagination, string search = null)
         {
-            var categoryTags = await _context.CategoryTags.OrderByDescending(orderBy => orderBy.CreatedDate).AsNoTracking().ToListAsync();
+            var categoryTags = from ct in _context.CategoryTags.OrderByDescending(orderBy => orderBy.UpdatedDate).OrderByDescending(orderBy => orderBy.CreatedDate).AsNoTracking() select ct;
             if(search != null){
-                categoryTags = categoryTags.Where(ct => ct.Tag.ToLower().Contains(search.Trim().ToLower())).ToList();
+                categoryTags = categoryTags.Where(ct => ct.Tag.ToLower().Contains(search.Trim().ToLower()));
             }
-            var pagingListTags = PagingList<CategoryTag>.OnCreate(categoryTags, pagination.CurrentPage,pagination.PageSize);
+            var pagingListTags = await PagingList<CategoryTag>.OnCreateAsync(categoryTags, pagination.CurrentPage,pagination.PageSize);
             return pagingListTags.CreatePaginate();
         }
 

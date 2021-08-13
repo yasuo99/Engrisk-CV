@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Application.DTOs.Account.Route;
+using Application.DTOs.Admin;
 using Application.DTOs.Certificate;
 using Application.DTOs.Pagination;
 using Application.DTOs.Section;
@@ -22,6 +23,8 @@ namespace Application.Services.Core.Abstraction
         Task<List<RouteDTO>> GetEngriskAllRouteAsync();
         Task<TypeRouteDTO> GetAllEngriskRouteAndProgressAsync(int accountId);
         Task<PaginateDTO<RouteDTO>> GetAllUserRoute(PaginationDTO pagination, int accountId, bool isPrivate = true, Status status = Status.Nope);
+        Task<RouteOverviewDTO> GetRouteOverviewAsync(DateRangeDTO dateRangeDTO);
+        Task<RouteAnalyzeDTO> GetRouteAnalyzeAsync(Guid id);
         Task<bool> CheckRouteOwnerAsync(Guid id, int accountId);
         Task<bool> ChangePrivateStatusAsync(Guid id);
         Task<PaginateDTO<RouteDTO>> AdminGetEngriskAllRouteAsync(PaginationDTO pagination, PublishStatus publishStatus = PublishStatus.None, string search = null);

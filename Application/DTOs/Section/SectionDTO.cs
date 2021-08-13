@@ -13,7 +13,9 @@ namespace Application.DTOs.Section
         public string PhotoUrl { get; set; }
         public string SectionName { get; set; }
         public string Description { get; set; }
+        public Guid RouteId { get; set; }
         public virtual RouteDTO Route { get; set; }
+        public int TotalScript { get; set; }
         public int Index { get; set; }
         public bool IsDone { get; set; }
         public bool IsCurrentLocked { get; set; }

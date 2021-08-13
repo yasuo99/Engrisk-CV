@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Application.DTOs.Example;
 using Application.DTOs.Memory;
 using Application.DTOs.Pagination;
 using Application.DTOs.Question;
@@ -25,6 +26,8 @@ namespace Application.Services.Core.Abstraction
         Task<bool> CheckExistAsync(Guid id);
         Task<bool> CheckConflictAsync(WordCreateDTO wordCreateDTO);
         Task<WordDTO> CreateWordAsync(WordCreateDTO wordCreateDTO);
+        Task<bool> CreateWordExample(Guid id, ExampleDTO example);
+        Task<bool> DeleteWordExamole(Guid id, List<Guid> examples);
         Task<Memory> CreateWordMemoryAsync(Word word, MemoryCreateDTO memoryCreateDTO, int accountId);
         Task<Memory> GetMemoryAsync(Word word, Guid memoryId);
         Task SelectMemoryAsync(int accountId, Guid wordId, Guid memoryId);
@@ -46,5 +49,8 @@ namespace Application.Services.Core.Abstraction
         Task<List<QuestionDTO>> WordLearnedReviewAsync(int accountId, string option);
         Task<List<QuestionDTO>> VocabularyReviewAsync(List<Guid> words);
         Task<bool> CheckReviewQuestionAsync(Guid questionId, Guid answerId);
+        //Data
+        Task<bool> GenerateWordQuestionAsync();
+        Task<bool> DeleteFailQuestionAsync();
     }
 }

@@ -1,10 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
+using Domain.Models.Version2;
 
 namespace Domain.Models
 {
     public class ExamHistory
     {
+        public ExamHistory()
+        {
+            AccountAnswers = new HashSet<AccountAnswer>();
+        }
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public Guid Id { get; set; }
         public Guid ExamId { get; set; }
@@ -22,5 +28,6 @@ namespace Domain.Models
         public int Score { get; set; }
         public int Listening { get; set; }
         public int Reading { get; set; }
+        public virtual ICollection<AccountAnswer> AccountAnswers { get; set; }
     }
 }

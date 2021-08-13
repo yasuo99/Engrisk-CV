@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Application.DTOs.Account;
 using Application.DTOs.Account.Route;
 using Application.DTOs.Certificate;
 using Application.DTOs.Pagination;
@@ -36,18 +37,29 @@ namespace Application.Services.Core
         }
         public async Task<PaginateDTO<RouteDTO>> AdminGetEngriskAllRouteAsync(PaginationDTO pagination, PublishStatus status = PublishStatus.None, string search = null)
         {
-            var routes = await _context.Routes.Where(route => route.AccountId == null).OrderByDescending(orderBy => orderBy.CreatedDate).Include(inc => inc.Sections).ToListAsync();
+            var routes = from r in _context.Routes.OrderByDescending(orderBy => orderBy.UpdatedDate).OrderByDescending(orderBy => orderBy.CreatedDate).AsNoTracking() select r;
             if (status != PublishStatus.None)
             {
-                routes = routes.Where(route => route.PublishStatus == status).ToList();
+                routes = routes.Where(route => route.PublishStatus == status);
             }
             if (search != null)
             {
-                routes = routes.Where(route => route.Title.ToLower().Contains(search.ToLower()) || route.Description.ToLower().Contains(search.ToLower())).ToList();
+                routes = routes.Where(route => route.Title.ToLower().Contains(search.ToLower()) || route.Description.ToLower().Contains(search.ToLower()));
             }
-            var routesDTO = _mapper.Map<List<RouteDTO>>(routes);
-            var pagingListRoutes = PagingList<RouteDTO>.OnCreate(routesDTO, pagination.CurrentPage, pagination.PageSize);
-            return pagingListRoutes.CreatePaginate();
+            var pagingListRoutes = await PagingList<Route>.OnCreateAsync(routes, pagination.CurrentPage, pagination.PageSize);
+            var result = pagingListRoutes.CreatePaginate();
+            var routesDTO = _mapper.Map<List<RouteDTO>>(result.Items);
+            foreach(var route in routesDTO){
+                route.Sections = _mapper.Map<List<SectionDTO>>(await _context.Sections.Where(sec => sec.RouteId == route.Id).ToListAsync());
+            }
+            return new PaginateDTO<RouteDTO>
+            {
+                CurrentPage = pagination.CurrentPage,
+                PageSize = pagination.PageSize,
+                Items = routesDTO,
+                TotalItems = result.TotalItems,
+                TotalPages = result.TotalPages
+            };
         }
 
         public async Task<bool> ChangePrivateStatusAsync(Guid id)
@@ -194,7 +206,17 @@ namespace Application.Services.Core
                     {
                         if (!section.IsCurrentLocked)
                         {
-                            undoneFirstScript.IsCurrentPosition = true;
+                            if (!route.IsSequentially)
+                            {
+                                if (!routeDto.Sections.Any(sec => sec.Scripts.Any(script => script.IsCurrentPosition)))
+                                {
+                                    undoneFirstScript.IsCurrentPosition = true;
+                                }
+                            }
+                            else
+                            {
+                                undoneFirstScript.IsCurrentPosition = true;
+                            }
                         }
                     }
                     var doneCount = section.Scripts.Where(script => script.IsDone).Count();
@@ -411,6 +433,7 @@ namespace Application.Services.Core
         {
             _route ??= await _context.Routes.FirstOrDefaultAsync(route => route.Id == id);
             _route.PublishStatus = status;
+            await _notificationService.SendSignalRResponse("Refresh", "");
             await _context.SaveChangesAsync();
             // if(status == PublishStatus.Published){
             //     _route = await _context.Routes.Where(route => route.Id == id).Include()
@@ -481,9 +504,10 @@ namespace Application.Services.Core
             var certificateScript = await _context.Scripts.Where(script => script.Section.RouteId == routeId && script.Type == ScriptTypes.Certificate).Include(inc => inc.MiniExam).Include(inc => inc.Certificate).AsNoTracking().FirstOrDefaultAsync();
             var examResult = await _context.ExamHistories.Where(eh => eh.AccountId == accountId && eh.ExamId == certificateScript.MiniExam.Id && eh.Score >= certificateScript.MiniExam.PassScore && !eh.ReceivedCertificate).OrderByDescending(orderBy => orderBy.Timestamp_end).FirstOrDefaultAsync();
             signatureCertificateDTO.Score = examResult.Score;
-            var certificate = await _certificateService.CreateUserCertificateAsync(accountId, certificateScript.Certificate.Id,signatureCertificateDTO);
+            var certificate = await _certificateService.CreateUserCertificateAsync(accountId, certificateScript.Certificate.Id, signatureCertificateDTO);
             var account = await _context.Accounts.Where(acc => acc.Id == accountId).Include(inc => inc.Certificates).FirstOrDefaultAsync();
-            account.Certificates.Add(new AccountCertificate{
+            account.Certificates.Add(new AccountCertificate
+            {
                 CertificateId = certificateScript.Certificate.Id,
                 Signature = certificate,
                 AchievedDate = DateTime.Now.Date,
@@ -492,6 +516,50 @@ namespace Application.Services.Core
             examResult.ReceivedCertificate = true;
             await _context.SaveChangesAsync();
             return certificate;
+        }
+
+        public async Task<RouteOverviewDTO> GetRouteOverviewAsync(DateRangeDTO dateRange)
+        {
+            var routeOverviewDTO = new RouteOverviewDTO();
+            var sectionProgresses = await _context.SectionProgresses.Include(inc => inc.Section).ToListAsync();
+            routeOverviewDTO.TotalParticipate = sectionProgresses.Select(sel => sel.AccountId).Distinct().Count(); //Đếm số lượng học viên
+
+            var temp2 = sectionProgresses.GroupBy(group => group.Section.RouteId).ToDictionary(key => key.Key, value => value.Select(sel => new { sectionId = sel.SectionId, IsDone = sel.IsDone }).Distinct().Count(sp => sp.IsDone));
+            var routes = await _context.Routes.Include(inc => inc.Sections).ToListAsync();
+            routeOverviewDTO.TotalSection = routes.SelectMany(sel => sel.Sections).Count();
+            routeOverviewDTO.TotalRoute = routes.Count();
+            routeOverviewDTO.TotalDone = temp2.Where(temp => routes.FirstOrDefault(route => route.Id == temp.Key).Sections.Where(sec => sec.PublishStatus == PublishStatus.Published).Count() == temp.Value).Count();
+            var temp = sectionProgresses.GroupBy(group => group.AccountId).ToDictionary(key => key.Key, data => data.GroupBy(group => group.Section.RouteId));
+            var test = temp.ToDictionary(key => key.Key, key => key.Value.Count(val => val.Count(count => count.IsDone) == routes.FirstOrDefault(route => route.Id == val.Key).Sections.Where(sec => sec.PublishStatus == PublishStatus.Published).Count()));
+            var dayStudies = await _context.DayStudies.Where(ds => ds.TotalSections > 0).Include(inc => inc.Account).ToListAsync();
+            routeOverviewDTO.Progress = dayStudies.GroupBy(group => group.Date).ToDictionary(key => key.Key, value => value.Sum(sum => sum.TotalSections));
+            routeOverviewDTO.Routes = _mapper.Map<List<RouteAnalyzeDTO>>(routes);
+            return routeOverviewDTO;
+        }
+
+        public async Task<RouteAnalyzeDTO> GetRouteAnalyzeAsync(Guid id)
+        {
+            _route = await _context.Routes.Where(route => route.Id == id).Include(inc => inc.Sections).ThenInclude(inc => inc.Scripts).FirstOrDefaultAsync();
+            var routeAnalyze = _mapper.Map<RouteAnalyzeDTO>(_route);
+            foreach (var section in routeAnalyze.Sections)
+            {
+                var sectionProgress = await _context.SectionProgresses.Where(sp => sp.SectionId == section.Id).ToListAsync();
+                section.Access = sectionProgress.Count;
+                section.Done = sectionProgress.Count(count => count.IsDone);
+                foreach (var script in section.Scripts)
+                {
+                    var sectionDetailProgresses = await _context.SectionDetailProgresses.Where(sdp => sdp.ScriptId == script.Id).ToListAsync();
+                    script.Done = sectionDetailProgresses.Count(sdp => sdp.IsDone);
+                    script.Access = sectionDetailProgresses.Count();
+                }
+            }
+            var routeProgress = await _context.SectionProgresses.Where(sp => sp.Section.RouteId == id).Include(inc => inc.Section).Include(inc => inc.Account).ToListAsync();
+            var temp = routeProgress.GroupBy(group => group.AccountId).ToDictionary(dic => dic.Key, dic => dic.Where(rp => rp.IsDone));
+            routeAnalyze.TotalDoneTime = temp.Count(count => count.Value.Count() == _route.Sections.Count);
+            routeAnalyze.TotalParticipate = routeProgress.Select(sel => sel.AccountId).Distinct().Count();
+            routeAnalyze.Participates = _mapper.Map<List<AccountBlogDTO>>(routeProgress.Select(sel => sel.Account).Distinct().ToList());
+            routeAnalyze.Progresses = routeProgress.GroupBy(group => group.AccountId).ToDictionary(key => key.Key, data => data.ToList().CamelcaseSerialize());
+            return routeAnalyze;
         }
     }
 }

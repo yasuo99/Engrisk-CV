@@ -10,6 +10,7 @@ namespace Domain.Enums
         Listening,
         ToeicVocabulary,
         MiniExam,
-        Certificate
+        Certificate,
+        Speaking
     }
 }

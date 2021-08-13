@@ -482,6 +482,10 @@ namespace Persistence.Migrations
                     b.Property<int>("Duration")
                         .HasColumnType("int");
 
+                    b.Property<string>("EndPage")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("IsPrivate")
                         .HasColumnType("bit");
 
@@ -498,6 +502,10 @@ namespace Persistence.Migrations
 
                     b.Property<Guid?>("ScriptId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("StartPage")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Title")
                         .HasColumnType("nvarchar(max)");
@@ -1228,6 +1236,35 @@ namespace Persistence.Migrations
                     b.HasIndex("AccountId");
 
                     b.ToTable("TopupHistories");
+                });
+
+            modelBuilder.Entity("Domain.Models.Version2.AccountAnswer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AnswerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ExamHistoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("QuestionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Result")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnswerId");
+
+                    b.HasIndex("ExamHistoryId");
+
+                    b.HasIndex("QuestionId");
+
+                    b.ToTable("AccountAnswers");
                 });
 
             modelBuilder.Entity("Domain.Models.Version2.AccountCardmem", b =>
@@ -2221,6 +2258,10 @@ namespace Persistence.Migrations
                     b.Property<string>("Spelling")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<Guid?>("SynonymId")
                         .HasColumnType("uniqueidentifier");
 
@@ -2754,6 +2795,26 @@ namespace Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Domain.Models.Version2.AccountAnswer", b =>
+                {
+                    b.HasOne("Domain.Models.Version2.Answer", "Answer")
+                        .WithMany("AccountAnswers")
+                        .HasForeignKey("AnswerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Models.ExamHistory", "ExamHistory")
+                        .WithMany("AccountAnswers")
+                        .HasForeignKey("ExamHistoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Domain.Models.Question", "Question")
+                        .WithMany("AccountAnswers")
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Domain.Models.Version2.AccountCardmem", b =>
                 {
                     b.HasOne("Domain.Models.Account", "Account")
@@ -3043,7 +3104,7 @@ namespace Persistence.Migrations
                     b.HasOne("Domain.Models.Word", "Word")
                         .WithMany("Scripts")
                         .HasForeignKey("WordId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -3139,13 +3200,13 @@ namespace Persistence.Migrations
                     b.HasOne("Domain.Models.Question", "Question")
                         .WithMany("Words")
                         .HasForeignKey("QuestionId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Domain.Models.Word", "Word")
                         .WithMany("Questions")
                         .HasForeignKey("WordId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

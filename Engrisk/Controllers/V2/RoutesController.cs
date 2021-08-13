@@ -29,10 +29,21 @@ namespace Engrisk.Controllers.V2
         {
             return Ok(await _routeService.AdminGetEngriskAllRouteAsync(pagination, status, search));
         }
+        [HttpGet("overview")]
+        public async Task<IActionResult> GetRouteOverview([FromQuery] DateRangeDTO dateRange){
+            return Ok(await _routeService.GetRouteOverviewAsync(dateRange));
+        }
         [HttpGet("{id}")]
         public async Task<IActionResult> GetRouteDetail(Guid id)
         {
             return Ok(await _routeService.GetRouteDetailAsync(id));
+        }
+        [HttpGet("{id}/analyze")]
+        public async Task<IActionResult> GetRouteAnalyze(Guid id){
+            if(!await _routeService.CheckRouteExistAsync(id)){
+                return NotFound();
+            }
+            return Ok(await _routeService.GetRouteAnalyzeAsync(id));
         }
         [HttpGet("users/{id}/manage")]
         public async Task<IActionResult> GetUserRoute(int id, [FromQuery] PaginationDTO pagination, [FromQuery] bool isPrivate = true, [FromQuery] Status status = Status.Nope)

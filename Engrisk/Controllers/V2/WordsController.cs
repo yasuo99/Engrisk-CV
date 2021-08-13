@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.SignalR;
 using Application.Hubs;
 using System.Collections.Generic;
 using Domain.Enums;
+using Application.DTOs.Example;
 
 namespace Engrisk.Controllers.V2
 {
@@ -70,6 +71,7 @@ namespace Engrisk.Controllers.V2
         /// </summary>
         /// <param name="wordDto">Object to create word</param>
         /// <returns>Word has been created</returns>
+        [DisableRequestSizeLimit]
         [HttpPost]
         public async Task<IActionResult> CreateWord([FromForm] WordCreateDTO wordDto)
         {
@@ -215,6 +217,18 @@ namespace Engrisk.Controllers.V2
             await _wordService.SelectMemoryAsync(accountId, wordId, memoryId);
             return Ok();
         }
+        [Authorize]
+        [HttpPost("{id}/examples")]
+        public async Task<IActionResult> CreateExample(Guid id, [FromBody] ExampleDTO example){
+            if(!await _wordService.CheckExistAsync(id)){
+                return NotFound();
+            }
+            if(await _wordService.CreateWordExample(id,example)){
+                return Ok();
+            }
+            return NoContent();
+        }
+
         [HttpPost("{wordId}/examples/contribute")]
         public async Task<IActionResult> ContributeExample(Guid wordId, [FromBody] Example example)
         {
@@ -316,5 +330,14 @@ namespace Engrisk.Controllers.V2
         //         });
         //     }
         // }
+        //Data
+        [HttpGet("data")]
+        public async Task<IActionResult> GenerateData(){
+            return Ok(await _wordService.GenerateWordQuestionAsync());
+        }
+        [HttpGet("remove")]
+        public async Task<IActionResult> RemoveData(){
+             return Ok(await _wordService.DeleteFailQuestionAsync());
+        }
     }
 }
